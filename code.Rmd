@@ -1,0 +1,432 @@
+---
+format:
+  html:
+    self-contained: true
+    theme: [cosmo, theme.scss]
+    toc: true
+    number-sections: true
+    html-math-method: katex
+    code-copy: true
+    code-summary: "Show the code"
+    code-overflow: wrap
+---
+
+```{r, echo = FALSE, message=FALSE, results='hide', warning=FALSE}
+library(tidyverse)
+library(lme4)
+library(pwr)
+```
+
+# Hypothesis testing: Toxicity assessment of the MON810 maize
+
+## Introduction
+
+The data set `MON810.csv` consists of several measurements made during a subchronic toxicity study concerning the MON810 maize.
+
+```{r}
+MON810 <- readr::read_csv("MON810.csv", show_col_types = FALSE)
+rmarkdown::paged_table(MON810)
+```
+
+Biochemical parameters reflecting most physiological functions were measured two times (week 5 and 14), in particular through serum and urine chemistry, and hematology. Organ weights were measured at week 14.
+
+The main objective of this study is to evaluate possible GMO effects on these parameters.
+
+## Single comparison
+
+We consider the variable "CALCIUM".
+    
+  1. Test if the mean level of calcium for period 2 is the same for males and females (*hint:* plot first the data and justify the test(s) to use).
+  
+
+```{r}
+
+
+
+( MON810%>% filter(period == 2))%>%ggplot() + aes(x = sex, y = CALCIUM) + geom_boxplot(aes(fill = sex)) + ylab("Calcium level")
+
+```
+
+Looking at the two box plots, it seems that the means of the two populations are different. Let's discuss if we can apply a student test to see that.
+
+```{r}
+(MON810 %>% filter(period == "2")) %>% ggplot() + aes(x = sex, y = CALCIUM) + geom_violin(aes(fill = sex)) + ylab("Calcium level")
+
+```
+
+We see that the two distibutions are skewed and are not symmetric so a student test can't be applied here.
+We apply a wilcoxon test.
+
+```{r}
+
+male_period2 = ( MON810%>% filter(period == 2 & sex =="M")) $"CALCIUM"
+female_period2 =  (MON810%>% filter(period == 2 & sex =="F")) $"CALCIUM"
+
+wilcox.test(male_period2,female_period2,alternative = "two.sided")
+```
+The p-value is $2.2 \times 10^{-16} < 0.05$. We reject the nuull hypothesis that the two mean levels are equal.
+
+```{r}
+wilcox.test(male_period2,female_period2,alternative = "greater")
+```
+Thanks to this test, we can say that the mean level of calcium for males in period 2 is smaller than the mean level of calcium for females in period 2.
+
+  2. test for the males if the mean level of calcium is the same for period 1 and period 2.
+  
+```{r}
+
+male = ( MON810%>% filter(sex == "M"))
+male$period = as.factor(male$period)
+male %>%ggplot() + aes(x = period, y = CALCIUM) + geom_boxplot(aes(fill = period)) + ylab("Calcium level")
+
+
+```
+
+
+```{r}
+male_period1 = ( MON810%>% filter(period == 1 & sex =="M")) $"CALCIUM"
+male_period2 = ( MON810%>% filter(period == 2 & sex =="M")) $"CALCIUM"
+wilcox.test(male_period1,male_period2,alternative = "two.sided")
+```
+The p-value is $< 0.05$, so we can reject the hypothesis that the mean level of calcium is the same for the two populations.
+
+  3. test for the males if the mean level of calcium for period 2 is the same for the control group and the MON810 group.
+  
+
+```{r}
+regimen = MON810%>%filter((regimen=="control" | regimen=="MON810")&period=="2"&sex=="M")
+
+regimen %>%ggplot() + aes(x = regimen, y = CALCIUM) + geom_boxplot(aes(fill = regimen)) + ylab("Calcium level")
+```
+```{r}
+mon810 = ( MON810%>% filter(period == 2 & sex =="M" & regimen == "MON810"))$"CALCIUM"
+control = ( MON810%>% filter(period == 2 & sex =="M" & regimen =="control" ))$"CALCIUM"
+
+wilcox.test(control,mon810,alternative = "two.sided")
+
+```
+The p-value is greater than $0.05$. We accept the null hypothesis stating that for males the mean level of calcium for period 2 is the same for the control group and the MON810 group.
+ 
+  4. What is the probability to detect a difference of one standard deviation (1 sd) with only 10 animals per group? with 20 animal? How can we ensure to detect such difference with a probability of 80%?
+    
+```{r}
+pwr.t.test(n = 10, d = 1, type = "two.sample",alternative="two.sided")
+```
+ For groups of 10 animals the probability to detect a difference of one standard deviation (1 sd) is $0.56$.
+
+```{r}
+pwr.t.test(n = 20, d = 1, type = "two.sample",alternative="two.sided")
+```
+For groups of 20 animals, the probability is equal to $0.86$.
+
+
+```{r}
+pwr.t.test(power = 0.8, d = 1)
+```
+ To detect a difference of one standard deviation with a probability of 80%, the previous test shows that we need groups of more than 17 animals.
+
+## Multiple comparisons
+
+  1. Redo the three tests of the previous section (questions 1-3) for now comparing the means of all the quantitative variables. Store the results (the p-values) in a data frame with one variable per row and four columns (name of the variable + three p-values). 
+  
+```{r}
+do_all_comparisons <- function(data) {
+  map(names (data)[5:51], 
+    function(g) {
+      ### TEST1
+    male_period2 <- filter(data, period == 2 & sex =="M" ) %>% pull(g)
+    female_period2 <- filter(data, period == 2 & sex =="F" ) %>% pull(g)
+    test1 <- t.test (male_period2,female_period2)
+    
+    male_period1 <- filter(data, period == 1 & sex =="M")%>% pull(g)
+    test2 <- t.test (male_period1,male_period2)
+    
+    mon810 <- filter(data,period == 2 & sex =="M" & regimen == "MON810")%>% pull(g)
+    control <- filter(data,period == 2 & sex =="M" & regimen == "control")%>% pull(g)
+    test3 <- t.test (mon810,control)
+    
+    data.frame(
+        regime    = g,
+        p_val_test1 = test1$p.value,
+        p_val_test2 = test2$p.value,
+        p_val_test3 = test3$p.value
+      ) %>% bind_rows()
+    
+  }) %>% bind_rows() 
+}
+```
+
+```{r}
+all_comparisons <- do_all_comparisons(MON810)
+all_comparisons %>% rmarkdown::paged_table(options = list(rows.print = 10))
+```
+
+  
+   
+   2. For each of the three tests, adjust the p-values using the Bonferroni  and the Benjamini-Hochberg corrections. How can we interpret these results?
+   
+```{r}
+for (col in names (all_comparisons)[2:4]){
+  all_comparisons[,paste("bonferroni",col)] <- p.adjust(all_comparisons %>% pull(col), method = "bonferroni")
+  
+  all_comparisons [,paste("BH",col)] <- p.adjust(all_comparisons%>% pull(col), method = "BH")
+}
+
+all_comparisons %>% rmarkdown::paged_table(options = list(rows.print = 10))
+
+```
+
+Let's see significant tests after both corrections.
+
+
+```{r}
+
+alpha <- 0.05
+
+non_significant_test <- data.frame(
+  
+  Corrections = c("Bonferroni","BH"),
+  
+  Test1 = c(sum(all_comparisons$"bonferroni p_val_test1" < alpha),sum(all_comparisons$"BH p_val_test1" < alpha)),
+  
+  Test2 = c(sum(all_comparisons$"bonferroni p_val_test2" < alpha),sum(all_comparisons$"BH p_val_test2" < alpha)),
+  
+  Test3 = c(sum(all_comparisons$"bonferroni p_val_test3" < alpha),sum(all_comparisons$"BH p_val_test3" < alpha))
+  
+)
+
+
+
+
+non_significant_test %>% rmarkdown::paged_table()
+```
+For test3, all the tests are significant which means that for each quantitative variable, the male mean level for period 2 is the same for the control group and the MON810 group.
+
+   
+# Linear models: quarterly sales volumes
+
+## Fitting a linear model
+
+The file `sales1.csv` consists of quarterly sales volumes (in % and indexed to the time 0) of a product.
+
+```{r}
+sales1 <- readr::read_csv("sales1.csv", show_col_types = FALSE)
+rmarkdown::paged_table(sales1)
+```
+
+  1. Plot the data and comment.
+  
+```{r}
+sales_plot <- sales1 %>% 
+  ggplot() +  aes(x = time, y = y) + 
+  geom_point(size = 2, colour="#993399") +  xlab("time") + ylab("sales volume")
+sales_plot
+```
+
+There is some periodic trend in the growth of the sales volume. In each period of 12 days, the sales increase to reach a local maximum then decreases until the tenth day.  
+It is an additive time series with a periodic seasonality of 12 days.
+  
+  2. Fit a polynomial model to this data (justify the choice of the degree). What do the residuals suggest? 
+  
+```{r}
+lm0 = lm(y~1,data=sales1)
+lm1 = lm(y ~ poly(time, degree = 1), data = sales1)
+lm2 = lm(y ~ poly(time, degree = 2), data = sales1)
+lm3 = lm(y ~ poly(time, degree = 3), data = sales1)
+lm4 = lm(y ~ poly(time, degree = 4), data = sales1)
+
+```
+  
+```{r}
+anova(lm0,lm1)
+```
+  The p-value of the Fisher test is $ 1.16*10^{-11} < 0.05 $ so lm1 is preferred to lm0.
+```{r}
+anova(lm1,lm2)
+```
+```{r}
+anova(lm2,lm3)
+```
+```{r}
+anova(lm1,lm3)
+```
+
+Thanks to these anova tests, we conclude that the polynomial model with degree 1 is preferred. Let's confirm this with another criterion.
+
+```{r}
+AIC(lm0,lm1,lm2,lm3,lm4)
+```
+```{r}
+BIC(lm0,lm1,lm2,lm3,lm4)
+```
+Even with AIC and BIC criteria, lm1 is preferred as it has the lowest AIC and BIC.
+
+  3. Try to improve the model by adding a periodic component. Write your final model as a mathematical equation.
+
+::: {.callout-info} 
+
+### Hints
+  - $$\cos(2\pi t/T)$$ and $$\sin(2\pi t/T)$$ are periodic functions of period $T$.
+  - One can easily deduce the period $T$ from the context and looking at the data.
+:::
+
+
+
+From the data plot, we see that the period is almost 12.
+Let's fit the data on this model 
+$$
+y = at +\alpha cos(\frac{2 \pi t}{T}) + \beta sin(\frac{2 \pi t}{T}) + b
+$$
+
+
+```{r}
+improved_lm <- lm(y ~ time + I(cos(2*time*pi/12)) + I(sin(2*time*pi/12)),data = sales1)
+summary <- summary(improved_lm)
+summary
+```
+We see that the p-value for the student test for each coefficient is so small $<0.05$ which means that the null hypothesis $(coefficient =0)$ is rejected. All the the terms included in the model are important to explain the data.
+
+  4. Plot on a same graph the observed sales together with the predicted sales given by your final model. What do you think about this model? What about the residuals?
+  
+```{r}
+sales_plot +   geom_smooth(method = "lm", formula = y ~ x + I(cos(2*x*pi/12)) + I(sin(2*x*pi/12)), se = FALSE, colour="#339900")
+
+```
+  
+```{r}
+plot (improved_lm,which = 1:4)
+```
+
+
+
+Thanks to the residuals plot we see that the residuals are centered around zero.
+Thanks to the normal QQ plot, the residuals satisfy the hypothesis of a normal distribution (but not perfectly).
+Thanks to scale location plot, the residuals satisfy the hypothesis of homoscedasticity.
+  
+```{r}
+anova (lm1,improved_lm)
+```
+
+The p-value of the fisher test associated to the two nested models lm1 and improved_lm is $1.082 \times 10^{-6} < 0.05$ which means that the improved_lm is preferred to the normal linear model lm1.
+
+  
+  
+  5. We want the predicted sales volume to be equal to 100 at time 0. Modify your final model in order to take this constraint into account.
+
+To satisfy this, the formula is 
+$$
+y = at +\alpha(cos(\frac{2 \pi t}{T}) -1 ) + \beta sin(\frac{2 \pi t}{T}) + 100
+$$
+
+
+```{r}
+improved_lm <- lm(y ~ 0 +  time + I(cos(2*time*pi/12) - 1) + I(sin(2*time*pi/12)) + offset(rep(100, length(time))),data = sales1)
+summary <- summary(improved_lm)
+summary
+```
+```{r}
+## Add time =0 and y = 100
+sales1[22,1] = 0
+sales1[22,]$y = 100
+
+
+## Plot the new model 
+sales_plot <- sales1 %>% 
+  ggplot() +  aes(x = time, y = y) + 
+  geom_point(size = 2, colour="#993399") +  xlab("time") + ylab("sales volume")
+
+
+sales_plot +   geom_smooth(method = "lm", formula = y ~ 0 +  x + I(cos(2*x*pi/12) - 1) + I(sin(2*x*pi/12)) + offset(rep(100, length(x))), se = FALSE, colour="#339900")
+```
+With the new model, the initial condition is satisfied.
+
+ 
+## Fitting a linear mixed effects model
+
+The file `sales30.csv` now consists of quarterly sales volumes (still in % and indexed to the time 0) of 30 different products.
+
+```{r}
+sales30 <- readr::read_csv("sales30.csv", show_col_types = FALSE) %>% mutate(id = as.factor(id))
+rmarkdown::paged_table(sales30)
+```
+
+  1. Plot the data and comment
+  
+```{r}
+sales_plot2 <- sales30[1:126,] %>% 
+  ggplot() +  aes(x = time, y = y, color = id)  +  geom_point(size = 3) + xlab("time") + ylab("sales volume") 
+sales_plot2  + geom_line()
+```
+ 
+We see on this plot, that even if the sales seem to increase linearly (with a periodic component) for each individual, the intercept and the slope may change from a subject to another one. 
+ 
+  2. Adjust the model used previously for fitting the first series to this data and comment the results.
+
+
+```{r}
+classical_model <- lm(y ~ time + I(cos(2*time*pi/12)) + I(sin(2*time*pi/12)),data = sales30)
+summary <- summary(classical_model)
+summary
+```
+
+
+
+```{r}
+sales30 %>% 
+  ggplot() +  aes(x = time, y = y, color = id)  +  geom_point(size = 1) + xlab("time") + ylab("sales volume") + geom_line(aes(x = time, y = predict(classical_model), color = id))  + facet_wrap(~id)
+
+```
+We see that the intercept and the slope of the time differ between different ids (the difference is notable between plot 5 and plot 6). We have to test if the slope of the cosine and sinus differ between individuals as well.
+
+  3. Fit a mixed effect model to this data (discuss the choice of fixed and random effects). Write your final model as a mathematical equation.
+  
+  We'll try different combinations of mixed effects model.
+```{r}
+lmem1 <- lmer(y ~ 1 + time + I(cos(2*time*pi/12)) + I(sin(2*time*pi/12)) + (1 + time|id) ,data = sales30) 
+summary(lmem1)
+```
+```{r}
+lmem2 <- lmer(y ~ 1 + time + I(cos(2*time*pi/12))  + I(sin(2*time*pi/ 12)) +(1 + time + I(cos(2*time*pi/12))|id) ,data = sales30) 
+summary(lmem2)
+```
+
+
+```{r}
+lmem3 <- lmer(y ~ 1 + time + I(cos(2*time*pi/12))  + I(sin(2*time*pi/ 12))+ (1 + time + I(sin(2*time*pi/12))|id) ,data = sales30) 
+summary(lmem3)
+```
+
+```{r}
+lmem4 <- lmer(y ~ 1 + time + I(cos(2*time*pi/12))  + I(sin(2*time*pi/ 12))+ (1 + time + I(sin(2*time*pi/12)) + I(cos(2*time*pi/12))|id)  ,data = sales30) 
+summary(lmem4)
+```
+Let's compare the four models : 
+
+```{r}
+BIC(lmem1,lmem2,lmem3,lmem4)
+```
+
+```{r}
+AIC(lmem1,lmem2,lmem3,lmem4)
+```
+
+
+The model preferred is lmem3 whose random effects are : the intercept, the time slope and the sinus slope.
+The mathematical formula is : 
+$$
+y_{i,j} = \beta_0 +\beta_1 t_{i,j} + \beta_2 sin(\frac{2 \pi t}{12}) +\beta_3 cos(\frac{2 \pi t}{12}) + \eta_{i,0} +\eta_{i,1} t_{i,j} + \eta_{i,2} sin(\frac{2 \pi t}{12}) + \epsilon_{i,j}
+$$
+where $y_{i,j}$ is the jth observation of the ith id, \beta is the fixed effects and \eta is random effects.
+
+  4. Plot the data with the predicted sales given by the chosen model.
+```{r}
+
+
+ sales30 %>% 
+  ggplot() +  aes(x = time, y = y, color = id) + 
+  geom_point(size = 1) +  xlab("time") + ylab("sales volume") + geom_line(aes(x = time, y = predict(lmem3), color = id)) + facet_wrap(~id)
+```
+  
+  After zooming on the plots, we see that our model fits better each id individually.
+  
+ 
