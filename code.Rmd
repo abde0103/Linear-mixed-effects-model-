@@ -24,7 +24,7 @@ library(pwr)
 The data set `MON810.csv` consists of several measurements made during a subchronic toxicity study concerning the MON810 maize.
 
 ```{r}
-MON810 <- readr::read_csv("MON810.csv", show_col_types = FALSE)
+MON810 <- readr::read_csv("data/MON810.csv", show_col_types = FALSE)
 rmarkdown::paged_table(MON810)
 ```
 
@@ -210,7 +210,7 @@ For test3, all the tests are significant which means that for each quantitative 
 The file `sales1.csv` consists of quarterly sales volumes (in % and indexed to the time 0) of a product.
 
 ```{r}
-sales1 <- readr::read_csv("sales1.csv", show_col_types = FALSE)
+sales1 <- readr::read_csv("data/sales1.csv", show_col_types = FALSE)
 rmarkdown::paged_table(sales1)
 ```
 
@@ -346,7 +346,7 @@ With the new model, the initial condition is satisfied.
 The file `sales30.csv` now consists of quarterly sales volumes (still in % and indexed to the time 0) of 30 different products.
 
 ```{r}
-sales30 <- readr::read_csv("sales30.csv", show_col_types = FALSE) %>% mutate(id = as.factor(id))
+sales30 <- readr::read_csv("data/sales30.csv", show_col_types = FALSE) %>% mutate(id = as.factor(id))
 rmarkdown::paged_table(sales30)
 ```
 
